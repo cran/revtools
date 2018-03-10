@@ -3,10 +3,11 @@
 \title{Interactive visualisation of bibliographic data}
 \description{Draw an interactive plot of a bibliography. Ordinations are calculated using LDA (library \code{"topicmodels"}) and are displayed using \code{shiny} and \code{plotly}.}
 \usage{
-start_review_window(x)
+start_review_window(x, remove_words)
 }
 \arguments{
   \item{x}{Bibliographic data, in one of three formats: a list returned by \code{read_bibliography()}; a \code{data.frame}; or a previously saved output from \code{start_review_window} (\code{class("review_info")}).}
+  \item{remove_words}{vector of words to be removed from consideration by the Topic Model. If none are given, \code{start_review_window} will use \code{tm::stopwords()}. Note that this vector will be converted to lower case before processing, so the algorithm is not case sensitive.}
 }
 \value{
 This function launches a Shiny app in the users' default browser. 
@@ -19,7 +20,7 @@ The plot window shows an ordination of article weights calculated using LDA, wit
 
 The selection panel gives information on progress in selecting/deselecting articles. It also contains windwos for displaying topic-level infromation and article abstracts. All boxes in this panel can be minimized when not required.
 
-Upon completion, the user can export information to a .csv or .rda file (saved to the working directory) using the 'export options' tab.
+Upon completion, the user can export information to a .csv or .rda file (saved to the working directory) using the 'Save' tab.
 }
 \examples{
 file_location<-system.file("extdata", "avian_ecology_bibliography.ris", package="revtools")

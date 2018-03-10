@@ -2,6 +2,7 @@ revtools_ui<-function(){
 
 # build user interface
 header<- shinydashboard::dashboardHeader(title="revtools")
+	
 sidebar<-shinydashboard::dashboardSidebar(
 	sidebarMenu(
 		id="tabs",
@@ -47,8 +48,8 @@ sidebar<-shinydashboard::dashboardSidebar(
 body<-shinydashboard::dashboardBody(
 	fluidRow(
 		column(width=8,
-			shinydashboard::box(width=NULL,
-				shinycssloaders::withSpinner(plotly::plotlyOutput("plot_main"))
+			shinydashboard::box(width=NULL, height=800,
+				plotly::plotlyOutput("plot_main")
 			)
 		),
 		column(width=4, 
@@ -78,6 +79,7 @@ body<-shinydashboard::dashboardBody(
 		)
 	)
 )
+
 
 return(list(header=header, sidebar=sidebar, body=body))
 }
