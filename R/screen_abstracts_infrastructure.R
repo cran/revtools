@@ -23,6 +23,7 @@ load_abstract_data <- function(data){
     )
 
     data <- add_abstract_columns(data)
+    colnames(data) <- tolower(colnames(data))
     x$data$raw <- data
     x$progress$row <- which(data[, "order_random"] == 1)
 
@@ -41,13 +42,22 @@ add_abstract_columns <- function(df){
   }
   if(!any(colnames(df) == "order_alphabetical")){
     if(any(colnames(df) == "title")){
-      df$order_alphabetical <- rank(df$title)
+      df$order_alphabetical <- base::rank(
+        df$title,
+        ties.method = "random"
+      )
     }else{
       df$order_alphabetical <- df$order_initial
     }
   }
   if(!any(colnames(df) == "order_random")){
-    df$order_random <- base::rank(rnorm(nrow(df)))
+    df$order_random <- base::rank(
+      rnorm(nrow(df)),
+      ties.method = "random"
+    )
+  }
+  if(!any(colnames(df) == "order_selected")){
+    df$order_selected <- df$order_random
   }
 
   # set display/save columns

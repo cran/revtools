@@ -1,4 +1,14 @@
-screen_duplicates <- function(x){
+screen_duplicates <- function(
+  x,
+  max_file_size
+){
+
+  # set file size if requested, ensuring to reset on exit
+  if(!missing(max_file_size)){
+    initial_file_size <- options("shiny.maxRequestSize")
+    options(shiny.maxRequestSize = max_file_size * 1024^2)
+    on.exit(options(initial_file_size))
+  }
 
   input_data <- list(
     raw = NULL,
@@ -16,11 +26,10 @@ screen_duplicates <- function(x){
     accepted_inputs <- c("bibliography", "data.frame")
     if(any(accepted_inputs == class(x)) == FALSE){
       stop("only classes 'bibliography' or 'data.frame' accepted by screen_duplicates")}
-
-    switch(class(x),
-      "bibliography" = {x <- as.data.frame(x)},
-      "data.frame" = {x <- x}
-    )
+    if(class(x) == "bibliography"){
+      x <- as.data.frame(x)
+    }
+    colnames(x) <- tolower(colnames(x))
     input_data$columns <- colnames(x)
 
   }
@@ -323,44 +332,6 @@ screen_duplicates <- function(x){
       }
     })
 
-    # summary text
-    output$match_summary <- renderPrint({
-      validate(
-        need(data$raw, "Import data to continue")
-      )
-      if(is.null(data$grouped)){
-        cat(
-          paste0(
-            "<font size='4'>Dataset with ",
-            nrow(data$raw),
-            " entries</font>"
-          )
-        )
-      }else{
-        if(is.null(progress$entry)){
-          cat(
-            paste0("<font size='4'>Dataset with ",
-              nrow(data$raw),
-              " entries  |  ",
-              length(data$grouped),
-              " duplicates remaining</font>"
-            )
-          )
-        }else{
-          cat(
-            paste0("<font size='4'>Dataset with ",
-              nrow(data$raw),
-              " entries  |  ",
-              length(data$grouped),
-              " duplicates remaining</font><br><font size='3'>Showing duplicate #",
-              progress$entry,
-              "</font>"
-            )
-          )
-        }
-      }
-    })
-
     # action buttons
     output$selector_1 <- renderUI({
       if(!is.null(progress$entry)){
@@ -380,34 +351,106 @@ screen_duplicates <- function(x){
         )
       }
     })
-    output$selector_none <- renderUI({
-      if(!is.null(progress$entry)){
-        actionButton(
-          inputId = "selected_none",
-          label = "Not duplicates",
-          width = "100%",
-          style = "background-color: #c17c7c;"
+
+
+    output$selector_bar <- renderUI({
+      if(is.null(data$raw)){
+        div(
+          style = "
+            display: inline-block;
+            vertical-align: top;
+            text-align: right;
+            width: 780px",
+          renderText({"Load data to continue"})
         )
-      }
-    })
-    output$selector_previous <- renderUI({
-      if(!is.null(progress$entry)){
-        actionButton(
-          inputId = "selected_previous",
-          label = "Previous",
-          width = "100%",
-          style = "background-color: #6b6b6b;"
-        )
-      }
-    })
-    output$selector_next <- renderUI({
-      if(!is.null(progress$entry)){
-        actionButton(
-          inputId = "selected_next",
-          label = "Next",
-          width = "100%",
-          style = "background-color: #6b6b6b;"
-        )
+      }else{
+        if(is.null(data$grouped)){
+          text_out <- HTML(
+            paste0(
+              "Dataset with ",
+              nrow(data$raw),
+              " entries"
+            )
+          )
+          div(
+            style = "
+              display: inline-block;
+              vertical-align: top;
+              text-align: right;
+              width: 780px",
+            renderText({text_out})
+          )
+        }else{
+          text_out <- HTML(
+            paste0("Dataset with ",
+              nrow(data$raw),
+              " entries  |  ",
+              " Showing duplicate ",
+              progress$entry,
+              " of ",
+              length(data$grouped)
+            )
+          )
+          div(
+            list(
+              div(
+                style = "
+                  display: inline-block;
+                  vertical-align: top;
+                  text-align: right;
+                  width: 556px",
+                renderText({text_out})
+              ),
+              div(
+                style = "
+                  display: inline-block;
+                  vertical-align: top;
+                  text-align: right;
+                  width: 20px",
+                renderText(" ")
+              ),
+              div(
+                style = "
+                  display: inline-block;
+                  vertical-align: top;
+                  text-align: right;
+                  width: 40px",
+                actionButton(
+                  inputId = "selected_previous",
+                  label = "<",
+                  width = "40px",
+                  style = "background-color: #6b6b6b;"
+                )
+              ),
+              div(
+                style = "
+                  display: inline-block;
+                  vertical-align: top;
+                  text-align: right;
+                  width: 110px",
+                actionButton(
+                  inputId = "selected_none",
+                  label = "Not duplicates",
+                  width = "110px",
+                  style = "background-color: #c17c7c;"
+                )
+              ),
+              div(
+                style = "
+                  display: inline-block;
+                  vertical-align: top;
+                  text-align: right;
+                  width: 40px",
+                actionButton(
+                  inputId = "selected_next",
+                  label = ">",
+                  width = "40px",
+                  style = "background-color: #6b6b6b;"
+                )
+              )
+            )
+          )
+        }
       }
     })
 

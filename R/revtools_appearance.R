@@ -1,6 +1,12 @@
 # add custom css
 revtools_css <- function(){
   shiny::tag("style", shiny::HTML("
+    .navbar-custom-menu {
+      width: 800px;
+    }
+    .navbar-nav {
+      width: 800px;
+    }
     .content-wrapper,
       .right-side {
         background-color: #e2e2e2;
@@ -14,6 +20,11 @@ revtools_css <- function(){
       }
       .skin-black .main-header .navbar {
         background-color: #afafaf;
+      }
+      .dropdown {
+        font-size: 120%;
+        padding-right: 20px;
+        padding-top: 12px;
       }
       .action-button {
         color: #fff;

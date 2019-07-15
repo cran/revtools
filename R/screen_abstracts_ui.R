@@ -2,6 +2,12 @@ screen_abstracts_ui <- function(){
 
   # build user interface
   header <- shinydashboard::dashboardHeader(
+    tag("li",
+      list(
+        class = "dropdown",
+        uiOutput("selector_bar")
+      )
+    ),
     title = plotOutput("header")
   )
 
@@ -11,7 +17,11 @@ screen_abstracts_ui <- function(){
       menuItem("Data",
         icon = shiny::icon("bar-chart-o"),
         startExpanded = TRUE,
-        fileInput("data_in", label = "Import"),
+        fileInput(
+          inputId = "data_in",
+          label = "Import",
+          multiple = TRUE
+        ),
         actionButton(
           inputId = "save_data",
           label = "Save Data",
@@ -37,8 +47,15 @@ screen_abstracts_ui <- function(){
           choices = list(
             "Random" = "order_random",
             "Input" = "order_initial",
-            "Alphabetical" = "order_alphabetical"
+            "Alphabetical" = "order_alphabetical",
+            "User-defined" = "order_selected"
           )
+        ),
+        uiOutput("column_selector"),
+        actionButton(
+          inputId = "order_result_go",
+          label = "Re-order",
+          width = "85%"
         ),
         selectInput("hide_names",
           label = "Hide identifying information?",
@@ -52,23 +69,24 @@ screen_abstracts_ui <- function(){
   body <- shinydashboard::dashboardBody(
     revtools_css(),
     fluidRow(
+      column(width = 1),
       column(
-        width = 1
+        width = 10,
+        tableOutput("citation"),
+        br(),
+        br(),
+        uiOutput(outputId = "render_notes_toggle"),
+        uiOutput(outputId = "render_notes")
       ),
-      column(
-        width = 8,
-        tableOutput("citation")
-      ),
-      column(
-        width = 1
-      ),
-      column(
-        width = 2,
-        uiOutput(outputId = "selector_buttons"),
-        uiOutput(outputId = "render_notes"),
-        tableOutput(outputId = "progress_text")
-      )
+      column(width = 1)
     )
+    # fluidRow(
+    #   column(width = 1),
+    #   column(
+    #     width = 10,
+    #     uiOutput(outputId = "render_notes")
+    #   )
+    # )
   )
 
   return(

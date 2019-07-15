@@ -1,6 +1,14 @@
 screen_titles <- function(
-  x = NULL
+  x = NULL,
+  max_file_size
 ){
+
+  # set file size if requested, ensuring to reset on exit
+  if(!missing(max_file_size)){
+    initial_file_size <- options("shiny.maxRequestSize")
+    options(shiny.maxRequestSize = max_file_size * 1024^2)
+    on.exit(options(initial_file_size))
+  }
 
   data_in <- load_title_data(data = x)
 
@@ -29,7 +37,8 @@ screen_titles <- function(
       yes = NULL,
       no = NULL,
       maybe = NULL,
-      page = data_in$click_values$page
+      page = data_in$click_values$page,
+      column = "label"
     )
     selector <- reactiveValues(
       yes = data_in$selector$yes,
@@ -105,7 +114,7 @@ screen_titles <- function(
         )
       )
       data$current <- seq_len(data$n_current)
-      data$raw$page <- calc_pages(
+      data$raw$screening_page <- calc_pages(
         n = nrow(data$raw),
         each = input$n_citations
       )
@@ -183,11 +192,11 @@ screen_titles <- function(
 
     # PAGE NAVIGATION
     # render navigation buttons
-    output$navigation_buttons <- renderUI({
-      if(!is.null(data$raw)){
-        navigation_buttons()
-      }
-    })
+    # output$navigation_buttons <- renderUI({
+    #   if(!is.null(data$raw)){
+    #     navigation_buttons()
+    #   }
+    # })
 
     # set page navigation functionality
     observeEvent(input$page_first, {
@@ -201,27 +210,13 @@ screen_titles <- function(
       }
     })
     observeEvent(input$page_next, {
-      if(input$page_next > 0 & (click_values$page < max(data$raw$page))){
+      if(input$page_next > 0 & (click_values$page < max(data$raw$screening_page))){
         click_values$page <- click_values$page + 1
       }
     })
     observeEvent(input$page_last, {
       if(input$page_last > 0){
-        click_values$page <- max(data$raw$page)
-      }
-    })
-
-    output$progress_pages <- renderPrint({
-      if(is.null(data$raw)){
-        cat("")
-      }else{
-        cat(paste0(
-          "<font size = 3>Page ",
-          click_values$page,
-          " of ",
-          max(data$raw$page),
-          "</font>"
-        ))
+        click_values$page <- max(data$raw$screening_page)
       }
     })
 
@@ -245,9 +240,35 @@ screen_titles <- function(
       }
     })
 
+
+    # ensure decisions about selected columns are retained
+    observeEvent(input$order_result, {
+      click_values$column <- input$order_result
+    })
+
+
+
+    # allow user to select order
+    output$column_selector <- renderUI({
+      if(input$order == "order_selected"){
+        available_colnames <- colnames(data$raw)
+        available_colnames <- available_colnames[
+          !available_colnames %in% c(
+            "notes", "selected", "color", "order", "screening_page"
+          )]
+        selectInput(
+          inputId = "order_result",
+          label = "Select variable to order by:",
+          choices = available_colnames,
+          selected = click_values$column
+        )
+      }
+    })
+
     observeEvent({
       input$n_citations
-      input$order
+      # input$order
+      input$order_result_go
       }, {
       if(!is.null(data$raw)){
         page_values <- calc_pages(
@@ -256,15 +277,23 @@ screen_titles <- function(
         )
         data$raw$order <- switch(input$order,
           "order_initial" = {seq_len(nrow(data$raw))},
-          "order_alphabetical" = {rank(data$raw$title)},
-          "order_random" = {order(rnorm(length(page_values)))}
+          "order_alphabetical" = {rank(
+            data$raw$title,
+            ties.method = "random"
+          )},
+          "order_random" = {order(rnorm(length(page_values)))},
+          "order_selected" = {rank(
+            data$raw[[input$order_result]],
+            ties.method = "random"
+          )}
         )
-        data$raw$page <- switch(input$order,
+        data$raw$screening_page <- switch(input$order,
           "order_initial" = {page_values},
           "order_alphabetical" = {page_values[data$raw$order]},
-          "order_random" = {page_values[order(rnorm(length(page_values)))]}
+          "order_random" = {page_values[order(rnorm(length(page_values)))]},
+          "order_selected" = {page_values[data$raw$order]},
         )
-        data$current <- which(data$raw$page == click_values$page)
+        data$current <- which(data$raw$screening_page == click_values$page)
         data$n_current <- min(
           c(
             length(data$current),
@@ -277,7 +306,7 @@ screen_titles <- function(
     observe({
       if(!is.null(data$raw)){
         # id selected text
-        selected_rows <- which(data$raw$page == click_values$page)
+        selected_rows <- which(data$raw$screening_page == click_values$page)
         data$current <- selected_rows[order(data$raw$order[selected_rows])]
         data$n_current <- length(data$current)
 
@@ -350,43 +379,59 @@ screen_titles <- function(
         }
       }
 
+      if(!is.null(data$raw)){
+        completeness_check(data$raw)
+      }
+
     })
 
     # track 'select all' buttons
     observeEvent(input$all_yes, {
       data$raw$selected[data$current] <- "selected"
       data$raw$color[data$current] <- "#405d99"
+      completeness_check(data$raw)
     })
     observeEvent(input$all_no, {
       data$raw$selected[data$current] <- "excluded"
       data$raw$color[data$current] <- "#993f3f"
+      completeness_check(data$raw)
     })
     observeEvent(input$all_maybe, {
       data$raw$selected[data$current] <- "unknown"
       data$raw$color[data$current] <- "#6d6d6d"
+      completeness_check(data$raw)
     })
 
     # add progress indicator
-    output$progress_text <- renderPrint({
-      if(is.null(data$raw)){
-        cat("")
-      }else{
+    output$progress_text <- renderUI({
+      if(!is.null(data$raw)){
         n_progress <- length(which(is.na(data$raw$selected) == FALSE))
         n_total <- nrow(data$raw)
-        cat(paste0(
-          "<font size = 3><b>Progress:</b> ",
-          n_progress,
-          " of ",
-          n_total,
-          " titles categorized</font>"
-        ))
-        # add tracker to prompt saving
-        if(all(!is.na(data$raw$selected))){
-          save_modal(
-            x = data$raw,
-            title = "Screening Complete: Save results?"
+        div(
+          list(
+            div(
+              style = "
+                display: inline-block;
+                vertical-align: top;
+                text-align: right;
+                width: 580px",
+              renderText({
+                HTML(
+                  paste0(
+                    n_progress,
+                    " of ",
+                    n_total,
+                    " entries screened | Showing page ",
+                    click_values$page,
+                    " of ",
+                    max(data$raw$screening_page)
+                  )
+                )
+              })
+            ),
+            navigation_buttons()
           )
-        }
+        )
       }
     })
 

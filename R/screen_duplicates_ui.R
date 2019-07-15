@@ -2,6 +2,12 @@ screen_duplicates_ui <- function(){
 
   # build user interface
   header <- shinydashboard::dashboardHeader(
+    tag("li",
+      list(
+        class = "dropdown",
+        uiOutput("selector_bar")
+      )
+    ),
     title = plotOutput("header")
   )
 
@@ -11,7 +17,11 @@ screen_duplicates_ui <- function(){
       menuItem("Data",
         icon = shiny::icon("bar-chart-o"),
         startExpanded = TRUE,
-        fileInput("data_in", label = "Import"),
+        fileInput(
+          inputId = "data_in",
+          label = "Import",
+          multiple = TRUE
+        ),
         uiOutput("data_selector"),
         uiOutput("response_selector"),
         menuItem("Grouping Variable(s)",
@@ -45,11 +55,11 @@ screen_duplicates_ui <- function(){
           inputId = "match_function",
           label = "Select function",
           choices = c(
-            "stringdist" = "stringdist::stringdist",
+            "stringdist" = "stringdist",
             "fuzzdist" = "fuzzdist",
             "exact" = "exact"
           ),
-          selected = "fuzzdist"
+          selected = "stringdist"
         ),
         uiOutput("algorithm_selector"),
         uiOutput("threshold_selector"),
@@ -86,27 +96,27 @@ screen_duplicates_ui <- function(){
 
   body <- shinydashboard::dashboardBody(
     revtools_css(),
-    fluidRow(
-      column(
-        width = 6,
-        tableOutput("match_summary")
-      ),
-      column(
-        width = 2,
-        uiOutput("selector_previous"),
-        br()
-      ),
-      column(
-        width = 2,
-        uiOutput("selector_none"),
-        br()
-      ),
-      column(
-        width = 2,
-        uiOutput("selector_next"),
-        br()
-      )
-    ),
+    # fluidRow(
+    #   # column(
+    #   #   width = 6,
+    #   #   tableOutput("match_summary")
+    #   # ),
+    #   column(
+    #     width = 2,
+    #     uiOutput("selector_previous"),
+    #     br()
+    #   ),
+    #   column(
+    #     width = 2,
+    #     uiOutput("selector_none"),
+    #     br()
+    #   ),
+    #   column(
+    #     width = 2,
+    #     uiOutput("selector_next"),
+    #     br()
+    #   )
+    # ),
     fluidRow(
       column(
         width = 6,

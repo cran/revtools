@@ -1,7 +1,16 @@
 screen_abstracts <- function(
-  x = NULL
+  x = NULL,
+  max_file_size
 ){
 
+  # set file size if requested, ensuring to reset on exit
+  if(!missing(max_file_size)){
+    initial_file_size <- options("shiny.maxRequestSize")
+    options(shiny.maxRequestSize = max_file_size * 1024^2)
+    on.exit(options(initial_file_size))
+  }
+
+  # load data
   data_in <- load_abstract_data(data = x)
 
   # create ui
@@ -26,7 +35,8 @@ screen_abstracts <- function(
       row = data_in$progress$row
     )
     display <- reactiveValues(
-      notes = FALSE
+      notes = FALSE,
+      column = "label"
     )
 
     # create header image
@@ -53,9 +63,38 @@ screen_abstracts <- function(
       progress$row <- which(data$raw[, input$order] == progress$current)
     })
 
+    # allow user to select order
+    output$column_selector <- renderUI({
+      if(input$order == "order_selected"){
+        available_colnames <- colnames(data$raw)
+        available_colnames <- available_colnames[
+          !available_colnames %in% c(
+            "order_initial", "order_alphabetical", "order_random", "order_selected",
+            "notes", "selected", "color"
+          )]
+        selectInput(
+          inputId = "order_result",
+          label = "Select variable to order by:",
+          choices = available_colnames,
+          selected = display$column
+        )
+      }
+    })
+
+    # ensure decisions about selected columns are retained
+    observeEvent(input$order_result, {
+      display$column <- input$order_result
+    })
+
     # ABSTRACT SCREENING
     # change order of articles as necessary
-    observeEvent(input$order, {
+    observeEvent(input$order_result_go, {
+      if(input$order == "order_selected"){
+        data$raw$order_selected <- rank(
+          data$raw[, input$order_result],
+          ties.method = "random"
+        )
+      }
       progress$current <- 1
       progress$row <- which(data$raw[, input$order] == progress$current)
     })
@@ -98,39 +137,58 @@ screen_abstracts <- function(
     })
 
     # RENDER SELECTION BUTTONS
-    output$selector_buttons <- renderUI({
+    output$selector_bar <- renderUI({
       if(!is.null(data$raw)){
+        text_out <- HTML(
+          paste0(
+            length(which(data$raw$selected == "selected")) +
+            length(which(data$raw$selected == "excluded")),
+            " entries screened | Showing entry ",
+            progress$current,
+            " of ",
+            nrow(data$raw)
+          )
+        )
+
         div(
           list(
-            actionButton(
-              inputId = "select_yes",
-              label = "Select",
-              style = "
-                background-color: #7c93c1;
-                color: #fff;
-                width: 100px"
-            ),
-            br(),
-            br(),
-            actionButton(
-              inputId = "select_no",
-              label = "Exclude",
-              style = "
-                background-color: #c17c7c;
-                color: #fff;
-                width: 100px"
-            ),
-            br(),
-            br(),
             div(
               style = "
                 display: inline-block;
                 vertical-align: top;
-                width: 55px",
+                text-align: right;
+                width: 350px",
+              renderText({text_out})
+            ),
+            div(
+              style = "
+                display: inline-block;
+                vertical-align: top;
+                text-align: right;
+                width: 20px",
+              renderText(" ")
+            ),
+            div(
+              style = "
+                display: inline-block;
+                vertical-align: top;
+                width: 40px",
+              actionButton(
+                inputId = "abstract_10previous",
+                label = "<<",
+                width = "40px",
+                style = "background-color: #6b6b6b;"
+              )
+            ),
+            div(
+              style = "
+                display: inline-block;
+                vertical-align: top;
+                width: 40px",
               actionButton(
                 inputId = "abstract_previous",
                 label = "<",
-                width = "45px",
+                width = "40px",
                 style = "background-color: #6b6b6b;"
               )
             ),
@@ -138,41 +196,70 @@ screen_abstracts <- function(
               style = "
                 display: inline-block;
                 vertical-align: top;
-                width: 45px",
+                text-align: right;
+                width: 100px",
+              actionButton(
+                inputId = "select_yes",
+                label = "Select",
+                style = "
+                  background-color: #7c93c1;
+                  color: #fff;
+                  width: 100px"
+              )
+            ),
+            div(
+              style = "
+                display: inline-block;
+                vertical-align: top;
+                text-align: right;
+                width: 100px",
+              actionButton(
+                inputId = "select_no",
+                label = "Exclude",
+                style = "
+                  background-color: #c17c7c;
+                  color: #fff;
+                  width: 100px"
+              )
+            ),
+            div(
+              style = "
+                display: inline-block;
+                vertical-align: top;
+                width: 40px",
               actionButton(
                 inputId = "abstract_next",
                 label = ">",
-                width = "45px",
+                width = "40px",
                 style = "background-color: #6b6b6b;"
               )
             ),
-            br(),
-            br(),
-            actionButton(
-              inputId = "notes_toggle",
-              label = "Notes",
+            div(
               style = "
-                background-color: #adadad;
-                color: #fff;
-                width: 100px"
-            ),
-            br()
+                display: inline-block;
+                vertical-align: top;
+                width: 40px",
+              actionButton(
+                inputId = "abstract_10next",
+                label = ">>",
+                width = "40px",
+                style = "background-color: #6b6b6b;"
+              )
+            )
           )
         )
       }
     })
 
-    output$progress_text <- renderPrint({
+    output$render_notes_toggle <- renderUI({
       if(!is.null(data$raw)){
-        HTML(
-          paste0(
-            "<br>",
-            length(which(data$raw$selected == "selected")) +
-            length(which(data$raw$selected == "excluded")),
-            " of ",
-            nrow(data$raw),
-            " entries screened"
-          )
+        actionButton(
+          inputId = "notes_toggle",
+          label = "Show notes window",
+          style = "
+            background-color: #adadad;
+            color: #fff;
+            width: 200px"
         )
       }
     })
@@ -192,8 +279,8 @@ screen_abstracts <- function(
               inputId = "abstract_notes",
               label = NULL,
               value = data$raw$notes[progress$row],
-              resize = "vertical",
-              width = "100%",
+              resize = "both",
+              width = "400px",
               height = "150px"
             ),
             actionButton(
@@ -240,6 +327,22 @@ screen_abstracts <- function(
         progress$row <- which(data$raw[, input$order] == progress$current)
       }
     })
+
+    observeEvent(input$abstract_10previous, {
+      if((progress$current - 10) > 0){
+        progress$current <- progress$current - 10
+      }else{
+        progress$current <- 1
+      }
+      progress$row <- which(data$raw[, input$order] == progress$current)
+    })
+
+    observeEvent(input$abstract_10next, {
+      new_row <- min(c(progress$current + 10, max(data$raw[, input$order])))
+      progress$current <- new_row
+      progress$row <- which(data$raw[, input$order] == new_row)
+    })
+
 
     # SAVE OPTIONS
     observeEvent(input$save_data, {

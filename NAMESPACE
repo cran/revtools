@@ -3,6 +3,7 @@ as.bibliography, summary.bibliography, print.bibliography, '[.bibliography', c.b
 tag_lookup,
 format_citation,
 format_citation.bibliography, format_citation.data.frame, format_citation.list,
+allocate_effort, distribute_tasks, aggregate_tasks,
 fuzzdist,
 fuzz_m_ratio, fuzz_partial_ratio, fuzz_token_sort_ratio, fuzz_token_set_ratio,
 find_duplicates, extract_unique_references,
@@ -28,21 +29,22 @@ importFrom(plotly,
 event_data, "%>%", plotlyOutput,
 renderPlotly, plotlyProxy, plotlyProxyInvoke)
 importFrom(shiny,
-br, div, HTML,
+br, div, HTML, tag,
 fluidRow, column, icon,
 checkboxInput, checkboxGroupInput,
 fileInput, sliderInput, selectInput, textInput, textAreaInput,
 actionButton, radioButtons,
-tableOutput, uiOutput, plotOutput,
+tableOutput, textOutput, uiOutput, plotOutput,
 reactiveValues, observe, observeEvent, isolate,
-renderPrint, renderPlot, renderUI, splitLayout,
+renderPrint, renderPlot, renderText, renderUI, splitLayout,
 validate, need,
 showModal, modalDialog, removeModal, modalButton,
 insertUI, removeUI,
 shinyApp, stopApp)
 importFrom(shinydashboard,
 sidebarMenu, menuItem, sidebarMenuOutput, renderMenu)
-importFrom(stats, xtabs)
+importFrom(stats, xtabs, plogis)
+importFrom(stringdist, stringdist)
 importFrom(tm, removePunctuation, removeWords, removeNumbers,
 stemDocument, tm_map, Corpus, VectorSource, DocumentTermMatrix,
 removeSparseTerms, stopwords, content_transformer, weightTf)

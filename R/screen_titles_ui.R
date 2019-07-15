@@ -2,6 +2,12 @@ screen_titles_ui <- function(){
 
   # build user interface
   header <- shinydashboard::dashboardHeader(
+    tag("li",
+      list(
+        class = "dropdown",
+        uiOutput("progress_text")
+      )
+    ),
     title = plotOutput("header")
   )
 
@@ -11,7 +17,11 @@ screen_titles_ui <- function(){
       menuItem("Data",
         icon = shiny::icon("bar-chart-o"),
         startExpanded = TRUE,
-        fileInput("data_in", label = "Import"),
+        fileInput(
+          inputId = "data_in",
+          label = "Import",
+          multiple = TRUE
+        ),
         actionButton(
           inputId = "save_data",
           label = "Save Data",
@@ -45,8 +55,15 @@ screen_titles_ui <- function(){
           choices = list(
             "Input" = "order_initial",
             "Random" = "order_random",
-            "Alphabetical" = "order_alphabetical"
+            "Alphabetical" = "order_alphabetical",
+            "User-defined" = "order_selected"
           )
+        ),
+        uiOutput("column_selector"),
+        actionButton(
+          inputId = "order_result_go",
+          label = "Re-order",
+          width = "85%"
         ),
         selectInput("hide_names",
           label = "Hide identifying information?",

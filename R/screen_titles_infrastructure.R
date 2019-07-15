@@ -25,6 +25,7 @@ load_title_data <- function(data){
     if(class(data) == "bibliography"){
       data <- as.data.frame(data)
     }
+    colnames(data) <- tolower(colnames(data))
 
     # create citation
     if(!any(colnames(data) == "citation")){
@@ -38,6 +39,11 @@ load_title_data <- function(data){
     if(!any(colnames(data) == "selected")){data$selected <- NA}
     if(!any(colnames(data) == "notes")){data$notes <- NA}
     if(!any(colnames(data) == "color")){data$color <- "#000000"}
+    data$screening_page <- calc_pages(
+      n = nrow(data),
+      each = 8
+    )
+    data$order <- seq_len(nrow(data))
 
     # save progress
     x$data$raw <- data
@@ -199,7 +205,7 @@ input_tracker <- function(input, string){
 
 # function to add navigation buttons
 navigation_buttons <- function(){
-  div(
+  # div(
     list(
       div(
         style = "
@@ -212,50 +218,34 @@ navigation_buttons <- function(){
         style = "
           display: inline-block;
           vertical-align: top;
-          width: 249px",
+          width: 180px",
         actionButton(
           inputId = "page_first",
           label = "<<",
-          width = "60px",
+          width = "40px",
           style = "background-color: #6b6b6b;"
         ),
         actionButton(
           inputId = "page_back",
           label = "<",
-          width = "60px",
+          width = "40px",
           style = "background-color: #6b6b6b;"
         ),
         actionButton(
           inputId = "page_next",
           label = ">",
-          width = "60px",
+          width = "40px",
           style = "background-color: #6b6b6b;"
         ),
         actionButton(
           inputId = "page_last",
           label = ">>",
-          width = "60px",
+          width = "40px",
           style = "background-color: #6b6b6b;"
-        )
-      ),
-      div(
-        style = "
-          display: inline-block;
-          vertical-align: top;
-          width: 10px",
-        HTML("")
-      ),
-      div(
-        style = "
-          display: inline-block;
-          vertical-align: top;
-          width: 200px",
-        tableOutput(
-          outputId = "progress_pages"
         )
       )
     )
-  )
+  # )
 }
 
 # function to add 'select all' buttons to screen_titles
@@ -314,23 +304,19 @@ select_all_buttons <- function(){
             background-color: #6d6d6d;
             color: #fff;"
         )
-      ),
-      div(
-        style = "
-          display: inline-block;
-          vertical-align: top;
-          width: 10px",
-        HTML("<br>")
-      ),
-      div(
-        style = "
-          display: inline-block;
-          vertical-align: top;
-          width: 700px",
-        tableOutput(
-          outputId = "progress_text"
-        )
       )
     )
   )
+}
+
+
+completeness_check <- function(
+  x # data$raw
+){
+  if(all(!is.na(x$selected))){
+    save_modal(
+      x = x,
+      title = "Screening Complete: Save results?"
+    )
+  }
 }
