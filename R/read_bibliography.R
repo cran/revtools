@@ -6,6 +6,9 @@ read_bibliography <- function(
   return_df = TRUE
 	){
 
+  invisible(Sys.setlocale("LC_ALL", "C"))
+  on.exit(invisible(Sys.setlocale("LC_ALL", "")))
+
   if(missing(filename)){
     stop("filename is missing with no default")
   }
@@ -30,6 +33,9 @@ read_bibliography <- function(
         },
         data = result_list
       ))
+      if(any(colnames(result) == "label")){
+        result$label <- make.unique(result$label)
+      }
       return(result)
     }else{
       result <- do.call(c, result_list)
@@ -57,8 +63,6 @@ read_bibliography_internal <- function(
     }
   }else{
     # import x
-    invisible(Sys.setlocale("LC_ALL", "C")) # gets around errors in import with special characters
-    on.exit(invisible(Sys.setlocale("LC_ALL", "")))
     z <- tryCatch(
       {
         scan(filename,
@@ -93,12 +97,17 @@ read_bibliography_internal <- function(
     if(n_brackets >  n_dashes){
       result <- read_bib(z)  # simple case - no further work needed
     }else{  #  ris format can be inconsistent; custom code needed
+      if(grepl(".ciw$", filename)){
+        tag_type <- "wos"
+      }else{
+        tag_type <- "ris"
+      }
       z_dframe <- prep_ris(z, detect_delimiter(zsub))
       # import appropriate format
       if(any(z_dframe$ris == "PMID")){
         result <- read_medline(z_dframe)
       }else{
-        result <- read_ris(z_dframe)
+        result <- read_ris(z_dframe, tag_type)
       }
     }
     if(return_df){
@@ -149,43 +158,42 @@ prep_ris <- function(
   delimiter
 ){
 	# detect tags
-	zlist <- as.list(z)
-	zlist <- lapply(zlist, function(a){
-		if(a == ""){
-      return(a)
-		}else{
-			caps_present <- gregexpr(
-        "^[[:upper:]]{2,4}|[[:upper:]]{1}[[:digit:]]{1}",
-        a
-      )[[1]]
-			if(any(caps_present == 1)){
-				end_caps <- attr(caps_present, "match.length")[1]
-				tag <- substr(a, 1, end_caps)
-				content <- gsub(
-          "^\\s+|\\s+$", "",
-          substr(a, (end_caps+1), nchar(a))
-        )
-				content <- gsub("^-|:", "", content)
-				content <- gsub("^\\s+|\\s+$", "", content)
-				return(
-          c(tag, content)
-        )
-			}else{
-        return(
-          c("", gsub("^\\s+|\\s+$", "", a))
-        )
-      }
-		}
-		})
-	z_dframe <- as.data.frame(
-    do.call(rbind, zlist),
+  tags <- regexpr(
+    "^([[:upper:]]{2,4}|[[:upper:]]{1}[[:digit:]]{1})\\s{0,}-{0,2}\\s{0,}",
+    perl = TRUE,
+    z
+  )
+  z_dframe <- data.frame(
+    text = z,
+    row = seq_along(z),
+    match_length = attr(tags, "match.length"),
     stringsAsFactors = FALSE
   )
-	colnames(z_dframe) <- c("ris", "text")
-	z_dframe$row_order <- seq_len(nrow(z_dframe))
+  z_list <- split(z_dframe, z_dframe$match_length)
+  z_list <- lapply(z_list, function(a){
+    n <- a$match_length[1]
+    if(n < 0){
+      result <- data.frame(
+        ris = "",
+        text = a$text,
+        row_order = a$row,
+        stringsAsFactors = FALSE
+      )
+    }else{
+      result <- data.frame(
+        ris = sub("\\s{0,}-\\s{0,}|^\\s+|\\s+$", "", substr(a$text, 1, n)),
+        text = gsub("^\\s+|\\s+$", "", substr(a$text, n+1, nchar(a$text))),
+        row_order = a$row,
+        stringsAsFactors = FALSE
+      )
+    }
+    return(result)
+  })
+  z_dframe <- do.call(rbind, z_list)
+  z_dframe <- z_dframe[order(z_dframe$row), ]
 
 	# replace tag information for delimiter == character | space
-	if(delimiter == "character"){
+	if(delimiter == "character"){ # i.e. a single character repeated many times
 		z_dframe$ris[which(
 			unlist(lapply(
         strsplit(z, ""),
@@ -193,17 +201,10 @@ prep_ris <- function(
           length(unique(a)) == 1 & length(a > 6)
         }
       ))
-		)]<-"ER"
+		)] <- "ER"
   }
 	if(delimiter == "space"){
-		z_dframe$ris[which(
-			unlist(lapply(
-        strsplit(z, ""),
-        function(a){
-          all(a == "" | a == " ")
-        }
-      ))
-    )] <- "ER"
+    z_dframe$ris[which(z_dframe$ris == "" & z_dframe$text == "")] <- "ER"
 		# ensure multiple consecutive empty rows are removed
 		z_rollsum <- rollingsum(z_dframe$ris == "ER")
 		if(any(z_rollsum > 1)){
@@ -248,12 +249,13 @@ prep_ris <- function(
   ) # split by reference
 	z_dframe <- z_dframe[which(z_dframe$text != ""), ] # remove empty rows
 	z_dframe <- z_dframe[which(z_dframe$ris != "ER"), ] # remove end rows
+  z_dframe$text <- trimws(z_dframe$text)
 
 	# fill missing tags
 	z_split <- split(z_dframe, z_dframe$ref)
 	z_split <- lapply(z_split, function(a){
 		if(a$ris[1] == ""){
-      a$ris[1]<-"ZZ"
+      a$ris[1] <- "ZZ"
     }
 		accum_ris <- Reduce(c, a$ris, accumulate = TRUE)
 		a$ris <- unlist(lapply(
@@ -264,10 +266,10 @@ prep_ris <- function(
 			}))
 		return(a)
   })
-
 	z_dframe <- as.data.frame(
     do.call(rbind, z_split)
   )
+
   return(z_dframe)
 }
 
@@ -275,18 +277,17 @@ prep_ris <- function(
 
 read_medline <- function(x){
 
-	names(x)[3] <- "order"
-	x.merge <- merge(x,
+	x_merge <- merge(x,
     tag_lookup(type = "medline"),
     by = "ris",
     all.x = TRUE,
     all.y = FALSE
   )
-	x.merge <- x.merge[order(x.merge$order), ]
+	x_merge <- x_merge[order(x_merge$row_order), ]
 
 	# convert into a list, where each reference is a separate entry
-	x.split <- split(x.merge[c("bib", "text")], x.merge$ref)
-	x.final <- lapply(x.split, function(a){
+	x_split <- split(x_merge[c("bib", "text")], x_merge$ref)
+	x_final <- lapply(x_split, function(a){
 		result <- split(a$text, a$bib)
 		if(any(names(result) == "abstract")){
 			result$abstract <- paste(result$abstract, collapse = " ")
@@ -309,11 +310,11 @@ read_medline <- function(x){
       }
     }
 		return(result)
-		})
+	})
 
-	names(x.final) <- unlist(lapply(x.final, function(a){a$pubmed_id}))
-	class(x.final) <- "bibliography"
-	return(x.final)
+	names(x_final) <- unlist(lapply(x_final, function(a){a$pubmed_id}))
+	class(x_final) <- "bibliography"
+	return(x_final)
 }
 
 
@@ -325,7 +326,7 @@ generate_bibliographic_names <- function(x){
 			name_vector[1] <- strsplit(a$author[1], ",")[[1]][1]
     }
 		if(any(names(a) == "year")){
-      name_vector[2] <- a$year
+      name_vector[2] <- a$year[1]
     }
 		if(any(names(a) == "journal")){
 			journal_info <- strsplit(a$journal, " ")[[1]]
@@ -341,7 +342,7 @@ generate_bibliographic_names <- function(x){
     }
 	}))
 
-	# where this is not possible, give a 'ref1' style result only as a last resort.
+	# where this is not possible, give a 'ref1' style result
 	if(any(nonunique_names == "ref")){
 		rows_tr <- which(nonunique_names == "ref")
 		nonunique_names[rows_tr] <- create_index("ref", length(rows_tr))
@@ -349,16 +350,7 @@ generate_bibliographic_names <- function(x){
 
 	# ensure names are unique
 	if(length(unique(nonunique_names)) < length(nonunique_names)){
-		name_counts <- xtabs(~ nonunique_names)
-		duplicated_names <- names(which(name_counts > 1))
-		for(i in 1:length(duplicated_names)){
-			rows <- which(nonunique_names == duplicated_names[i])
-			new_names <- paste(
-        nonunique_names[rows],
-        letters[seq_len(length(rows))],
-        sep = "_")
-			nonunique_names[rows] <- new_names
-    }
+    nonunique_names <- make.unique(nonunique_names, sep = "_")
   }
 
 	return(nonunique_names)
@@ -366,61 +358,74 @@ generate_bibliographic_names <- function(x){
 
 
 # RIS
-read_ris <- function(x){
+read_ris <- function(x, tag_type = "ris"){
 
 	# merge data with lookup info, to provide bib-style tags
-	x.merge <- merge(x, tag_lookup(type = "ris"),
+	x_merge <- merge(x, tag_lookup(type = tag_type),
     by = "ris",
     all.x = TRUE,
     all.y = FALSE)
-	x.merge <- x.merge[order(x.merge$row_order), ]
+	x_merge <- x_merge[order(x_merge$row_order), ]
 
 	# find a way to store missing .bib data rather than discard
-	if(any(is.na(x.merge$bib))){
-		rows_tr <- which(is.na(x.merge$bib))
-    x.merge$bib[rows_tr] <- x.merge$ris[rows_tr]
-    if(all(is.na(x.merge$order))){
+	if(any(is.na(x_merge$bib))){
+		rows_tr <- which(is.na(x_merge$bib))
+    x_merge$bib[rows_tr] <- x_merge$ris[rows_tr]
+    if(all(is.na(x_merge$row_order))){
       start_val <- 0
     }else{
-      start_val <- max(x.merge$order, na.rm = TRUE)
+      start_val <- max(x_merge$row_order, na.rm = TRUE)
     }
-    x.merge$order[rows_tr] <- as.numeric(
-      as.factor(x.merge$ris[rows_tr])
+    x_merge$row_order[rows_tr] <- as.numeric(
+      as.factor(x_merge$ris[rows_tr])
     ) + start_val
 	}
 
 	# method to systematically search for year data
-	year_check <- regexpr("\\d{4}", x.merge$text)
-	if(any(year_check > 0)){
-		check_rows <- which(year_check > 0)
-		year_strings <- as.numeric(substr(
-      x = x.merge$text[check_rows],
-			start = year_check[check_rows],
-      stop = year_check[check_rows]+3
-    ))
-		if(any(x.merge$bib[check_rows] == "year", na.rm = TRUE)){
-			year_rows <- which(x.merge$bib[check_rows] == "year")
-			x.merge$text[check_rows[year_rows]] <- year_strings[year_rows]
+  year_check <- regexpr("^\\d{4}$", x_merge$text)
+  if(any(year_check > 0)){
+    check_rows <- which(year_check > 0)
+    year_strings <- as.numeric(x_merge$text[check_rows])
+
+    # for entries with a bib entry labelled year, check that there arent multiple years
+		if(any(x_merge$bib[check_rows] == "year", na.rm = TRUE)){
+      # check for repeated year information
+      year_freq <- xtabs(~ ref, data = x_merge[which(x_merge$bib == "year"), ])
+      if(any(year_freq > 1)){
+        year_df <- x_merge[which(x_merge$bib == "year"), ]
+        year_list <- split(nchar(year_df$text), year_df$ris)
+        year_4 <- sqrt((4 - unlist(lapply(year_list, mean))) ^ 2)
+        # rename bib entries that have >4 characters to 'year_additional'
+        incorrect_rows <- which(
+          x_merge$ris != names(which.min(year_4)[1]) &
+          x_merge$bib == "year"
+        )
+        x_merge$bib[incorrect_rows] <- "year_additional"
+      }
 		}else{
-			possible_rows <- which(year_strings > 1850 & year_strings <= as.numeric(format(Sys.Date(), "%Y")))
+			possible_rows <- which(
+        year_strings > 0 &
+        year_strings <= as.numeric(format(Sys.Date(), "%Y")) + 1
+      )
 			tag_frequencies <- as.data.frame(
-				xtabs(~ x.merge$ris[check_rows[possible_rows]]),
+				xtabs(~ x_merge$ris[check_rows[possible_rows]]),
 				stringsAsFactors = FALSE
       )
 			colnames(tag_frequencies) <- c("tag", "n")
 			# now work out what proportion of each tag contain year data
 			# compare against number of references to determine likelihood of being 'the' year tag
-			tag_frequencies$prop <- tag_frequencies$n/(max(x.merge$ref)+1) # number of references
+			tag_frequencies$prop <- tag_frequencies$n/(max(x_merge$ref)+1) # number of references
 			if(any(tag_frequencies$prop > 0.9)){
 				year_tag <- tag_frequencies$tag[which.max(tag_frequencies$prop)]
-				rows.tr <- which(x.merge$ris == year_tag)
-				x.merge$bib[rows.tr] <- "year"
-				x.merge$order[rows.tr] <- 3
-				x.merge$text[rows.tr] <- substr(
-          x = x.merge$text[rows.tr],
-          start = year_check[rows.tr],
-          stop = year_check[rows.tr]+3
-        )
+				rows.tr <- which(x_merge$ris == year_tag)
+				x_merge$bib[rows.tr] <- "year"
+				x_merge$row_order[rows.tr] <- 3
+        # the following code was necessary when string >4 characters long were detected
+				# x_merge$text[rows.tr] <- substr(
+        #   x = x_merge$text[rows.tr],
+        #   start = year_check[rows.tr],
+        #   stop = year_check[rows.tr]+3
+        # )
 			}
 		}
 	}
@@ -428,41 +433,41 @@ read_ris <- function(x){
 	# use code from blog.datacite.org for doi detection
 	# then return a consistent format - i.e. no www.dx.doi.org/ etc.
 	# regexpr("/^10.d{4,9}/[-._;()/:A-Z0-9]+$/i", test) # original code
-	doi_check <- regexpr("/10.\\d{4,9}/", x.merge$text) # my version
-	if(any(doi_check > 0)){
-		check_rows <- which(doi_check > 0)
-		x.merge$bib[check_rows] <- "doi"
-		x.merge$order[check_rows] <- 11
-		x.merge$text[check_rows] <- substr(
-      x = x.merge$text[check_rows],
-			start = doi_check[check_rows]+1,
-			stop = nchar(x.merge$text[check_rows])
-    )
-	}
+	# doi_check <- regexpr("/10.\\d{4,9}/", x_merge$text) # my version
+	# if(any(doi_check > 0)){
+	# 	check_rows <- which(doi_check > 0)
+	# 	x_merge$bib[check_rows] <- "doi"
+	# 	x_merge$row_order[check_rows] <- 11
+	# 	x_merge$text[check_rows] <- substr(
+  #     x = x_merge$text[check_rows],
+	# 		start = doi_check[check_rows]+1,
+	# 		stop = nchar(x_merge$text[check_rows])
+  #   )
+	# }
 
 	# ensure author data from a single ris tag
-	if(any(x.merge$bib == "author")){
-		lookup.tags <- xtabs( ~ x.merge$ris[which(x.merge$bib == "author")])
+	if(any(x_merge$bib == "author")){
+		lookup.tags <- xtabs( ~ x_merge$ris[which(x_merge$bib == "author")])
 		if(length(lookup.tags) > 1){
       replace_tags <- names(which(lookup.tags < max(lookup.tags)))
-      replace_rows <- which(x.merge$ris %in% replace_tags)
-      x.merge$bib[replace_rows] <- x.merge$ris[replace_rows]
-      if(all(is.na(x.merge$order))){
+      replace_rows <- which(x_merge$ris %in% replace_tags)
+      x_merge$bib[replace_rows] <- x_merge$ris[replace_rows]
+      if(all(is.na(x_merge$row_order))){
         start_val <- 0
       }else{
-        start_val <- max(x.merge$order, na.rm = TRUE)
+        start_val <- max(x_merge$row_order, na.rm = TRUE)
       }
-      x.merge$order[replace_rows] <- start_val + as.numeric(
-        as.factor(x.merge$ris[replace_rows])
+      x_merge$row_order[replace_rows] <- start_val + as.numeric(
+        as.factor(x_merge$ris[replace_rows])
       )
 		}
 	}
 
 	# convert into a list, where each reference is a separate entry
-	x.split <- split(x.merge[c("bib", "ris", "text", "order")], x.merge$ref)
+	x_split <- split(x_merge[c("bib", "ris", "text", "row_order")], x_merge$ref)
 
 	# convert to list format
-	x.final <- lapply(x.split, function(a){
+	x_final <- lapply(x_split, function(a){
 		result <- split(a$text, a$bib)
 		# YEAR
 		if(any(names(result) == "year")){
@@ -523,21 +528,21 @@ read_ris <- function(x){
         result$pages <- paste(sort(result$pages), collapse = "-")
       }
     }
-		entry.order <- unlist(lapply(
+		entry_order <- unlist(lapply(
       names(result),
-      function(b, order){
-				order$order[which(order$bib == b)[1]]
+      function(b, initial){
+				initial$row_order[which(a$bib == b)[1]]
       },
-      order = a
+      initial = a
     ))
-		final_result <- result[order(entry.order)]
+		final_result <- result[order(entry_order)]
 
 		return(final_result)
-		})
+	})
 
-	names(x.final) <- generate_bibliographic_names(x.final)
-	class(x.final) <- "bibliography"
-	return(x.final)
+	names(x_final) <- generate_bibliographic_names(x_final)
+	class(x_final) <- "bibliography"
+	return(x_final)
 	}
 
 

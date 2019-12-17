@@ -1,6 +1,5 @@
 \name{screen_topics}
 \alias{screen_topics}
-\alias{start_review_window}
 \title{Shiny app for screening bibliographies using topic models}
 \description{Screening is usually achieved by manually sorting titles or abstracts one at a time. \code{screen_topics} offers an alternative by allowing the user to group data by any column in the input dataset, and running a topic model on the resulting data. This allows a great deal of flexibility to locate patterns in journals, years, or authors, rather than just articles. Data points can be selected or excluded individually, or by topic.
 }
@@ -20,7 +19,7 @@ The sidebar shows a series of drop-down menus that can be used to customize or r
 
 The plot window shows an ordination of article weights calculated using LDA, with articles colored by their highest-weighted topic. Hovering over a point shows the title and abstract below the plot; clicking allows selection or deselection of that article (and optionally displays co-authorship data). Selecting a region of the plot and clicking zooms on the selected region; double-clicking without selecting a region returns the plot to its full extent.
 
-The selection panel gives information on progress in selecting/deselecting articles. It also contains windwos for displaying topic-level infromation and article abstracts. All boxes in this panel can be minimized when not required.
+The selection panel gives information on progress in selecting/deselecting articles. It also contains windows for displaying topic-level infromation and article abstracts. All boxes in this panel can be minimized when not required.
 
 Ordinations are calculated using LDA (library \code{"topicmodels"}) and are displayed using \code{shiny} and \code{plotly}.
 
